@@ -1,24 +1,23 @@
 import Foundation
 import Logging
-import struct Logging.Logger
 import os
 
 public struct LoggingOSLog: LogHandler {
-    public var logLevel: Logger.Level = .info
+    public var logLevel: Logging.Logger.Level = .info
     public let label: String
-    private let oslogger: OSLog
-    
-    public init(label: String) {
+    private let osLogger: os.Logger
+
+    public init(label: String, category: String) {
         self.label = label
-        self.oslogger = OSLog(subsystem: label, category: "")
+        self.osLogger = os.Logger(subsystem: label, category: category)
     }
 
-    public init(label: String, log: OSLog) {
+    public init(label: String, log: os.Logger) {
         self.label = label
-        self.oslogger = log
+        self.osLogger = log
     }
     
-    public func log(level: Logger.Level, message: Logger.Message, metadata: Logger.Metadata?, file: String, function: String, line: UInt) {
+    public func log(level: Logging.Logger.Level, message: Logging.Logger.Message, metadata: Logging.Logger.Metadata?, file: String, function: String, line: UInt) {
         var combinedPrettyMetadata = self.prettyMetadata
         if let metadataOverride = metadata, !metadataOverride.isEmpty {
             combinedPrettyMetadata = self.prettify(
@@ -32,11 +31,28 @@ public struct LoggingOSLog: LogHandler {
         if combinedPrettyMetadata != nil {
             formedMessage += " -- " + combinedPrettyMetadata!
         }
-        os_log("%{public}@", log: self.oslogger, type: OSLogType.from(loggerLevel: level), formedMessage as NSString)
+
+        switch level {
+        case .trace:
+            osLogger.trace("\(formedMessage)")
+        case .debug:
+            osLogger.debug("\(formedMessage)")
+        case .info:
+            osLogger.info("\(formedMessage)")
+        case .notice:
+            osLogger.notice("\(formedMessage)")
+        case .warning:
+            osLogger.warning("\(formedMessage)")
+        case .error:
+            osLogger.error("\(formedMessage)")
+        case .critical:
+            osLogger.critical("\(formedMessage)")
+        }
+
     }
     
     private var prettyMetadata: String?
-    public var metadata = Logger.Metadata() {
+    public var metadata = Logging.Logger.Metadata() {
         didSet {
             self.prettyMetadata = self.prettify(self.metadata)
         }
@@ -45,7 +61,7 @@ public struct LoggingOSLog: LogHandler {
     /// Add, remove, or change the logging metadata.
     /// - parameters:
     ///    - metadataKey: the key for the metadata item.
-    public subscript(metadataKey metadataKey: String) -> Logger.Metadata.Value? {
+    public subscript(metadataKey metadataKey: String) -> Logging.Logger.Metadata.Value? {
         get {
             return self.metadata[metadataKey]
         }
@@ -54,37 +70,12 @@ public struct LoggingOSLog: LogHandler {
         }
     }
     
-    private func prettify(_ metadata: Logger.Metadata) -> String? {
+    private func prettify(_ metadata: Logging.Logger.Metadata) -> String? {
         if metadata.isEmpty {
             return nil
         }
         return metadata.map {
             "\($0)=\($1)"
         }.joined(separator: " ")
-    }
-}
-
-extension OSLogType {
-    static func from(loggerLevel: Logger.Level) -> Self {
-        switch loggerLevel {
-        case .trace:
-            /// `OSLog` doesn't have `trace`, so use `debug`
-            return .debug
-        case .debug:
-            return .debug
-        case .info:
-            return .info
-        case .notice:
-            // https://developer.apple.com/documentation/os/logging/generating_log_messages_from_your_code
-            // According to the documentation, `default` is `notice`.
-            return .default
-        case .warning:
-            /// `OSLog` doesn't have `warning`, so use `info`
-            return .info
-        case .error:
-            return .error
-        case .critical:
-            return .fault
-        }
     }
 }
